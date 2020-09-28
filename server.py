@@ -40,13 +40,13 @@ def connectionLoop(sock):
             clients[addr]['color'] = 0
             print('[Notice] New Client Added: ', str(addr))
 
-            # Inform all currently connected clients of the arrival of the new client. TODO
+            # Inform all currently connected clients of the arrival of the new client. UNTESTED
             msgDict = {"cmd": 0,"player":{"id":str(addr)}}
             msgJson = json.dumps(msgDict)
             for targetClient in clients:
                sock.sendto(bytes(msgJson,'utf8'), (targetClient[0],targetClient[1])) 
 
-            # Send newly connected client a list of currently connected clients. TODO
+            # Send newly connected client a list of currently connected clients. TESTED
             GameState = {"cmd": 3, "players": []}
             clients_lock.acquire()
             for c in clients:
@@ -63,20 +63,24 @@ def connectionLoop(sock):
 # Every loop, the server checks if a client has not sent a heartbeat in the last 5 seconds. 
 # If a client did not meet the heartbeat conditions, the server drops the client from the game.
 # If a client is dropped, the server sends a message to all clients currently connected to inform them of the dropped player. (Implementation Missing)
-def cleanClients():
+def cleanClients(sock):
    while True:
       # Loop through clients
       for c in list(clients.keys()):
 
          # Every loop, the server checks if a client has not sent a heartbeat in the last 5 seconds.
          if (datetime.now() - clients[c]['lastBeat']).total_seconds() > 5:
-
+            droppedClientAddress = c
             # Drop the client from the game.
             print('[Notice] Dropped Client: ', c)
             clients_lock.acquire()
             del clients[c]
             
             #Sends a message to all clients currently connected to inform them of the dropped player. TODO
+            msgDict = {"cmd": 2,"player":{"id":str(droppedClientAddress)}}
+            msgJson = json.dumps(msgDict)
+            for targetClient in clients:
+               sock.sendto(bytes(msgJson,'utf8'), (targetClient[0],targetClient[1])) 
 
             clients_lock.release()
             
@@ -116,7 +120,7 @@ def main():
    s.bind(('', port))
    start_new_thread(gameLoop, (s,))
    start_new_thread(connectionLoop, (s,))
-   start_new_thread(cleanClients,())
+   start_new_thread(cleanClients, (s,))
    print('[Notice] Server running.')
    while True:
       time.sleep(1)
