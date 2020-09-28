@@ -78,6 +78,7 @@ def cleanClients(sock):
             
             #Sends a message to all clients currently connected to inform them of the dropped player. TODO
             msgDict = {"cmd": 2,"player":{"id":str(droppedClientAddress)}}
+
             msgJson = json.dumps(msgDict)
             for targetClient in clients:
                sock.sendto(bytes(msgJson,'utf8'), (targetClient[0],targetClient[1])) 
