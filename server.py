@@ -34,25 +34,31 @@ def connectionLoop(sock):
          # When a new client connects:
          if 'connect' in data:
 
-            # The server adds the new client to a list of clients it has.
+            # The server adds the new client to a dictionary of clients it has.
             clients[addr] = {}
             clients[addr]['lastBeat'] = datetime.now()
             clients[addr]['color'] = 0
-            print('[Notice] New Client Added: ', clients[addr])
+            print('[Notice] New Client Added: ', str(addr))
 
             # Inform all currently connected clients of the arrival of the new client. TODO
             msgDict = {"cmd": 0,"player":{"id":str(addr)}}
             msgJson = json.dumps(msgDict)
             for targetClient in clients:
-               sock.sendto(bytes(msgJson,'utf8'), (targetClient[0],targetClient[1]))
+               sock.sendto(bytes(msgJson,'utf8'), (targetClient[0],targetClient[1])) 
 
             # Send newly connected client a list of currently connected clients. TODO
             GameState = {"cmd": 3, "players": []}
-            #clients_lock.acquire()
+            clients_lock.acquire()
+            for c in clients:
+               player = {}
+               clients[c]['color'] = {"R": 0, "G": 0, "B": 0}
+               player['id'] = str(c)
+               player['color'] = clients[c]['color']
+               GameState['players'].append(player)
+            
             msgState = json.dumps(GameState)
-            #sock.sendto(bytes(msgState,'utf8'), (clients[addr][0],clients[addr][1]))
-            #clients_lock.release()
-
+            sock.sendto(bytes(msgState,'utf8'), (addr[0],addr[1])) 
+            clients_lock.release()
 
 # Every loop, the server checks if a client has not sent a heartbeat in the last 5 seconds. 
 # If a client did not meet the heartbeat conditions, the server drops the client from the game.
@@ -85,8 +91,8 @@ def gameLoop(sock):
       # The server updates the current state of the game. This game state contains the id’s and colours of all the players currently in the game.
       GameState = {"cmd": 1, "players": []}
       clients_lock.acquire()
-      print ('[Notice] Client List:')
-      print (clients)
+      #print ('[Notice] Client List:')
+      #print (clients)
       for c in clients:
          player = {}
          clients[c]['color'] = {"R": random.random(), "G": random.random(), "B": random.random()}
