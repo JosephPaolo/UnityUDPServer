@@ -1,6 +1,6 @@
 """
-Author: Galal 
-
+Authors: Galal Hassan, Joseph Malibiran
+Last Modified: September 28, 2020
 """
 
 
@@ -46,7 +46,13 @@ def connectionLoop(sock):
             for targetClient in clients:
                sock.sendto(bytes(msgJson,'utf8'), (targetClient[0],targetClient[1]))
 
-            #Send newly connected client a list of currently connected clients. TODO
+            # Send newly connected client a list of currently connected clients. TODO
+            GameState = {"cmd": 3, "players": []}
+            #clients_lock.acquire()
+            msgState = json.dumps(GameState)
+            #sock.sendto(bytes(msgState,'utf8'), (clients[addr][0],clients[addr][1]))
+            #clients_lock.release()
+
 
 # Every loop, the server checks if a client has not sent a heartbeat in the last 5 seconds. 
 # If a client did not meet the heartbeat conditions, the server drops the client from the game.
@@ -63,9 +69,11 @@ def cleanClients():
             print('[Notice] Dropped Client: ', c)
             clients_lock.acquire()
             del clients[c]
-            clients_lock.release()
-
+            
             #Sends a message to all clients currently connected to inform them of the dropped player. TODO
+
+            clients_lock.release()
+            
 
       time.sleep(1)
 
@@ -77,8 +85,8 @@ def gameLoop(sock):
       # The server updates the current state of the game. This game state contains the id’s and colours of all the players currently in the game.
       GameState = {"cmd": 1, "players": []}
       clients_lock.acquire()
-      #print ('[Notice] Client List:')
-      #print (clients)
+      print ('[Notice] Client List:')
+      print (clients)
       for c in clients:
          player = {}
          clients[c]['color'] = {"R": random.random(), "G": random.random(), "B": random.random()}
@@ -87,11 +95,11 @@ def gameLoop(sock):
          GameState['players'].append(player)
 
       # Sends a message containing the current state of the game. This game state contains the id’s and colours of all players currently in the game.
-      s=json.dumps(GameState)
+      msgState = json.dumps(GameState)
       #print ('[Notice] Game State:')
       #print(s)
       for c in clients:
-         sock.sendto(bytes(s,'utf8'), (c[0],c[1]))
+         sock.sendto(bytes(msgState,'utf8'), (c[0],c[1]))
       clients_lock.release()
       time.sleep(1)
 
