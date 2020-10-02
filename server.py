@@ -1,6 +1,6 @@
 """
 Authors: originally by Galal Hassan, heavily modified by Joseph Malibiran
-Last Modified: September 28, 2020
+Last Modified: October 2, 2020
 """
 
 
@@ -35,48 +35,6 @@ def connectionLoop(sock):
       #msgQueue.append(msgString) # Append new string to message queue to be processed later
       msgQueue.put(msgString)
 
-      print('address: ', msgDict['ip'] + ":" + msgDict['port'])
-      
-   """
-      if addr in clients:
-
-         # If the server receives a heartbeat message:
-         if 'heartbeat' in data:
-
-            # Update last heartbeat time
-            clients[addr]['lastBeat'] = datetime.now()
-
-      else: 
-         # When a new client connects:
-         if 'connect' in data:
-
-            # The server adds the new client to a dictionary of clients it has.
-            clients[addr] = {}
-            clients[addr]['lastBeat'] = datetime.now()
-            clients[addr]['color'] = 0
-            print('[Notice] New Client Added: ', str(addr))
-
-            # Inform all currently connected clients of the arrival of the new client. 
-            msgDict = {"cmd": 0,"player":{"id":str(addr)}}
-            msgJson = json.dumps(msgDict)
-            for targetClient in clients:
-               sock.sendto(bytes(msgJson,'utf8'), (targetClient[0],targetClient[1])) 
-
-            # Send newly connected client a list of currently connected clients. 
-            GameState = {"cmd": 3, "players": []}
-            clients_lock.acquire()
-            for c in clients:
-               player = {}
-               clients[c]['color'] = {"R": 0, "G": 0, "B": 0}
-               player['id'] = str(c)
-               player['color'] = clients[c]['color']
-               GameState['players'].append(player)
-            
-            msgState = json.dumps(GameState)
-            sock.sendto(bytes(msgState,'utf8'), (addr[0],addr[1])) 
-            clients_lock.release()
-   """
-
 #UNTESTED
 def processMessages(sock):
 
@@ -84,8 +42,6 @@ def processMessages(sock):
 
       if msgQueue.empty() == False:
          msgDict = json.loads(msgQueue.get())
-
-         print('msgDict: ', msgDict)
 
          if msgDict['flag'] == 1: # New Client Connection
             srcAddress = msgDict['ip'] + ":"  + msgDict['port']
@@ -95,9 +51,6 @@ def processMessages(sock):
             clients[srcAddress]['ip'] = str(msgDict['ip'])
             clients[srcAddress]['port'] = str(msgDict['port'])
             print('[Notice] New Client Added: ', str(srcAddress))
-
-            for targetClient in clients:
-               print('targetClient: ', targetClient)
 
             # Inform all currently connected clients of the arrival of the new client. 
             print('[Notice] Sending connected clients the data of the new client...')
@@ -120,8 +73,6 @@ def processMessages(sock):
             
             msgState = json.dumps(GameState)
 
-            print('msgState: ', msgState)
-
             sock.sendto(bytes(msgState,'utf8'), (clients[srcAddress]['ip'], int(clients[srcAddress]['port']))) 
             clients_lock.release()
                
@@ -134,6 +85,17 @@ def processMessages(sock):
                #TODO send Pong back to client
             else:
                print('[Error] Client ping has invalid client address key! Aborting proceedure...')
+         
+         elif msgDict['flag'] == 4: # Client Coordinates
+            keyString = msgDict['ip'] + ":"  + msgDict['port']
+            print('[Routine] Received client coordinates from: ', keyString)
+
+            if keyString in clients:
+               clients[keyString]['position']['x'] = msgDict['x']
+               clients[keyString]['position']['y'] = msgDict['y']
+               clients[keyString]['position']['z'] = msgDict['z']
+            else:
+               print('[Error] Client coordinate update has invalid client address key! Aborting proceedure...')
                
 
 # Every loop, the server checks if a client has not sent a ping in the last 5 seconds. 
