@@ -11,6 +11,7 @@ from _thread import *
 import threading
 from datetime import datetime
 import json
+import queue
 
 clients_lock = threading.Lock()
 connected = 0
@@ -19,19 +20,23 @@ connected = 0
 clients = {}
 
 #Queue
-msgQueue = [] 
+msgQueue = queue.Queue() 
 
 # Connection loop continuously listens for messages and stores them in a queue to be processed separately
 def connectionLoop(sock):
    while True:
       data, addr = sock.recvfrom(1024)
-      data = str(data)
-      
-      msgDict = json.loads(data) # Convert [string json] to [python dictionary]
-      msgDict['source'] = str(addr) # Append 'source', the address of message sender, to python dictionary
-      msgString = json.dumps(msgDict) # Convert new dictionary back into string
-      msgQueue.append(msgString) # Append new string to message queue to be processed later
+      #data = str(data)
 
+      msgDict = json.loads(data) # Convert [string json] to [python dictionary] TODO not working?
+      msgDict['ip'] = str(addr[0]) # Append 'ip' and 'source', the address of message sender, to python dictionary
+      msgDict['port'] = str(addr[1])
+      msgString = json.dumps(msgDict) # Convert new dictionary back into string
+      #msgQueue.append(msgString) # Append new string to message queue to be processed later
+      msgQueue.put(msgString)
+
+      print('address: ', msgDict['ip'] + ":" + msgDict['port'])
+      
    """
       if addr in clients:
 
@@ -74,52 +79,73 @@ def connectionLoop(sock):
 
 #UNTESTED
 def processMessages(sock):
+
    while True:
-      if msgQueue.count > 0:
-         msgDict = json.loads(msgQueue.pop)
-         
+
+      if msgQueue.empty() == False:
+         msgDict = json.loads(msgQueue.get())
+
+         print('msgDict: ', msgDict)
+
          if msgDict['flag'] == 1: # New Client Connection
-            srcAddress = msgDict['source']
+            srcAddress = msgDict['ip'] + ":"  + msgDict['port']
             clients[srcAddress] = {}
             clients[srcAddress]['lastPing'] = datetime.now()
             clients[srcAddress]['position'] = {"x": 0,"y": 0,"z": 0}
+            clients[srcAddress]['ip'] = str(msgDict['ip'])
+            clients[srcAddress]['port'] = str(msgDict['port'])
             print('[Notice] New Client Added: ', str(srcAddress))
 
+            for targetClient in clients:
+               print('targetClient: ', targetClient)
+
             # Inform all currently connected clients of the arrival of the new client. 
-            newMsgDict = {"cmd": 0,"player":{"id":str(srcAddress)}}
+            print('[Notice] Sending connected clients the data of the new client...')
+            newMsgDict = {"cmd": 0,"player":{"ip":str(msgDict['ip']), "port":str(msgDict['port']), "position":{"x": 0,"y": 0,"z": 0}}}
             msgJson = json.dumps(newMsgDict)
             for targetClient in clients:
-               sock.sendto(bytes(msgJson,'utf8'), (targetClient[0],targetClient[1])) 
+               sock.sendto(bytes(msgJson,'utf8'), (clients[targetClient]['ip'], int(clients[targetClient]['port']))) 
 
             # Send newly connected client a list of currently connected clients. 
+            print('[Notice] Sending the new client the data of connected clients...')
             GameState = {"cmd": 3, "players": []}
             clients_lock.acquire()
-            for c in clients:
-               player = {}
-               clients[c]['position'] = {"x": 0, "y": 0, "z": 0}
-               player['id'] = str(c)
-               player['color'] = clients[c]['color']
-               GameState['players'].append(player)
+
+            for clientKey in clients:
+               newPlayerDict = {}
+               newPlayerDict['ip'] = clients[clientKey]['ip']
+               newPlayerDict['port'] = clients[clientKey]['port']
+               newPlayerDict['position'] = clients[clientKey]['position']
+               GameState['players'].append(newPlayerDict)
             
-               msgState = json.dumps(GameState)
-               sock.sendto(bytes(msgState,'utf8'), (srcAddress[0],srcAddress[1])) 
-               clients_lock.release()
+            msgState = json.dumps(GameState)
+
+            print('msgState: ', msgState)
+
+            sock.sendto(bytes(msgState,'utf8'), (clients[srcAddress]['ip'], int(clients[srcAddress]['port']))) 
+            clients_lock.release()
                
          elif msgDict['flag'] == 2: # Client Ping
-            clients[msgDict['source']]['lastPing'] = datetime.now()
+            keyString = msgDict['ip'] + ":"  + msgDict['port']
+            print('[Routine] Received client ping from: ', keyString)
+
+            if keyString in clients:
+               clients[keyString]['lastPing'] = datetime.now()
+               #TODO send Pong back to client
+            else:
+               print('[Error] Client ping has invalid client address key! Aborting proceedure...')
                
 
-
-# Every loop, the server checks if a client has not sent a heartbeat in the last 5 seconds. 
-# If a client did not meet the heartbeat conditions, the server drops the client from the game.
+# Every loop, the server checks if a client has not sent a ping in the last 5 seconds. 
+# If a client did not meet the ping conditions, the server drops the client from the game.
 # If a client is dropped, the server sends a message to all clients currently connected to inform them of the dropped player. (Implementation Missing)
 def cleanClients(sock):
    while True:
       # Loop through clients
       for c in list(clients.keys()):
 
-         # Every loop, the server checks if a client has not sent a heartbeat in the last 5 seconds.
-         if (datetime.now() - clients[c]['lastBeat']).total_seconds() > 5:
+         # Every loop, the server checks if a client has not sent a ping in the last 5 seconds.
+         if (datetime.now() - clients[c]['lastPing']).total_seconds() > 5:
             droppedClientAddress = c
             # Drop the client from the game.
             print('[Notice] Dropped Client: ', c)
@@ -131,7 +157,7 @@ def cleanClients(sock):
 
             msgJson = json.dumps(msgDict)
             for targetClient in clients:
-               sock.sendto(bytes(msgJson,'utf8'), (targetClient[0],targetClient[1])) 
+               sock.sendto(bytes(msgJson,'utf8'), (clients[targetClient]['ip'], int(clients[targetClient]['port']))) 
 
             clients_lock.release()
             
@@ -150,9 +176,9 @@ def gameLoop(sock):
       #print (clients)
       for c in clients:
          player = {}
-         clients[c]['color'] = {"R": random.random(), "G": random.random(), "B": random.random()}
+         clients[c]['position'] = {"x": 0, "y": 0, "z": 0}
          player['id'] = str(c)
-         player['color'] = clients[c]['color']
+         player['position'] = clients[c]['position']
          GameState['players'].append(player)
 
       # Sends a message containing the current state of the game. This game state contains the id’s and colours of all players currently in the game.
@@ -160,7 +186,7 @@ def gameLoop(sock):
       #print ('[Notice] Game State:')
       #print(s)
       for c in clients:
-         sock.sendto(bytes(msgState,'utf8'), (c[0],c[1]))
+         sock.sendto(bytes(msgState,'utf8'), (clients[c]['ip'],int(clients[c]['port'])))
       clients_lock.release()
       time.sleep(1)
 
