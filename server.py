@@ -96,7 +96,6 @@ def processMessages(sock):
                clients[keyString]['position']['z'] = msgDict['z']
             else:
                print('[Error] Client coordinate update has invalid client address key! Aborting proceedure...')
-               
 
 # Every loop, the server checks if a client has not sent a ping in the last 5 seconds. 
 # If a client did not meet the ping conditions, the server drops the client from the game.
@@ -110,12 +109,12 @@ def cleanClients(sock):
          if (datetime.now() - clients[c]['lastPing']).total_seconds() > 5:
             droppedClientAddress = c
             # Drop the client from the game.
-            print('[Notice] Dropped Client: ', c)
+            print('[Notice] Dropped Client: ', droppedClientAddress)
             clients_lock.acquire()
-            del clients[c]
+            del clients[droppedClientAddress]
             
             #Sends a message to all clients currently connected to inform them of the dropped player. 
-            msgDict = {"cmd": 2,"player":{"id":str(droppedClientAddress)}}
+            msgDict = {"cmd": 2,"player":{"ip":str(msgDict['ip']), "port":str(msgDict['port'])}}
 
             msgJson = json.dumps(msgDict)
             for targetClient in clients:
@@ -131,26 +130,32 @@ def cleanClients(sock):
 def gameLoop(sock):
    while True:
       
-      # The server updates the current state of the game. This game state contains the id’s and colours of all the players currently in the game.
-      GameState = {"cmd": 1, "players": []}
-      clients_lock.acquire()
-      #print ('[Notice] Client List:')
-      #print (clients)
-      for c in clients:
-         player = {}
-         clients[c]['position'] = {"x": 0, "y": 0, "z": 0}
-         player['id'] = str(c)
-         player['position'] = clients[c]['position']
-         GameState['players'].append(player)
+      if len(clients) > 0:
+         # The server updates the current state of the game. This game state contains the id’s and colours of all the players currently in the game.
+         GameState = {"cmd": 1, "players": []}
+         clients_lock.acquire()
+         #print ('[Notice] Client List:')
+         #print (clients)
+         for clientKey in clients:
+            if len(clients) > 0:
+               player = {}
+               player['ip'] = clients[clientKey]['ip']
+               player['port'] = clients[clientKey]['port']
+               player['position'] = {"x": clients[clientKey]['position']['x'], "y": clients[clientKey]['position']['y'], "z": clients[clientKey]['position']['z']}
+               GameState['players'].append(player)
+            else:
+               break
 
-      # Sends a message containing the current state of the game. This game state contains the id’s and colours of all players currently in the game.
-      msgState = json.dumps(GameState)
-      #print ('[Notice] Game State:')
-      #print(s)
-      for c in clients:
-         sock.sendto(bytes(msgState,'utf8'), (clients[c]['ip'],int(clients[c]['port'])))
-      clients_lock.release()
-      time.sleep(1)
+         # Sends a message containing the current state of the game. This game state contains the id’s and colours of all players currently in the game.
+         msgState = json.dumps(GameState)
+         #print ('[Notice] Game State:')
+         #print(s)
+         #print('[Routine] Sending out client coordinates...')
+         for clientKey in clients:
+            sock.sendto(bytes(msgState,'utf8'), (clients[clientKey]['ip'],int(clients[clientKey]['port'])))
+         clients_lock.release()
+
+      time.sleep(0.033)
 
 def main():
    print('[Notice] Setting up server... ')
