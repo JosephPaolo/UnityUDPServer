@@ -52,6 +52,12 @@ def processMessages(sock):
             clients[srcAddress]['port'] = str(msgDict['port'])
             print('[Notice] New Client Added: ', str(srcAddress))
 
+            # Send new client its public address
+            print('[Notice] Sending public address to new client...')
+            addrMsgDict = {"cmd": 5, "ip": str(msgDict['ip']), "port": str(msgDict['port'])}
+            addrMsgjson = json.dumps(addrMsgDict)
+            sock.sendto(bytes(addrMsgjson,'utf8'), (clients[srcAddress]['ip'], int(clients[srcAddress]['port']))) 
+
             # Inform all currently connected clients of the arrival of the new client. 
             print('[Notice] Sending connected clients the data of the new client...')
             newMsgDict = {"cmd": 0,"player":{"ip":str(msgDict['ip']), "port":str(msgDict['port']), "position":{"x": 0,"y": 0,"z": 0}, "orientation":{"x": 0,"y": 0,"z": 0}}}
@@ -79,7 +85,7 @@ def processMessages(sock):
                
          elif msgDict['flag'] == 2: # Client Ping
             keyString = msgDict['ip'] + ":"  + msgDict['port']
-            print('[Routine] Received client ping from: ', keyString)
+            #print('[Routine] Received client ping from: ', keyString)
 
             if keyString in clients:
                clients[keyString]['lastPing'] = datetime.now()
@@ -89,7 +95,7 @@ def processMessages(sock):
          
          elif msgDict['flag'] == 4: # Client Coordinates and Orientation data
             keyString = msgDict['ip'] + ":"  + msgDict['port']
-            print('[Routine] Received client data from: ', keyString)
+            #print('[Routine] Received client data from: ', keyString)
 
             if keyString in clients:
                clients[keyString]['position']['x'] = msgDict['position']['x']
@@ -104,7 +110,7 @@ def processMessages(sock):
 
 # Every loop, the server checks if a client has not sent a ping in the last 5 seconds. 
 # If a client did not meet the ping conditions, the server drops the client from the game.
-# If a client is dropped, the server sends a message to all clients currently connected to inform them of the dropped player. (Implementation Missing)
+# If a client is dropped, the server sends a message to all clients currently connected to inform them of the dropped player. 
 def cleanClients(sock):
    while True:
       # Loop through clients
@@ -112,14 +118,16 @@ def cleanClients(sock):
 
          # Every loop, the server checks if a client has not sent a ping in the last 5 seconds.
          if (datetime.now() - clients[c]['lastPing']).total_seconds() > 5:
-            droppedClientAddress = c
+            droppedClientIP = str(clients[c]['ip'])
+            droppedClientPort = str(clients[c]['port'])
+            dropedClientAddress = droppedClientIP + ":" + droppedClientPort
             # Drop the client from the game.
-            print('[Notice] Dropped Client: ', droppedClientAddress)
+            print('[Notice] Dropped Client: ', droppedClientIP + ":" + droppedClientPort)
             clients_lock.acquire()
-            del clients[droppedClientAddress]
+            del clients[dropedClientAddress]
             
             #Sends a message to all clients currently connected to inform them of the dropped player. 
-            msgDict = {"cmd": 2,"player":{"ip":str(msgDict['ip']), "port":str(msgDict['port'])}}
+            msgDict = {"cmd": 2,"player":{"ip":droppedClientIP, "port":droppedClientPort}}
 
             msgJson = json.dumps(msgDict)
             for targetClient in clients:
