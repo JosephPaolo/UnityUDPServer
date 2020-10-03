@@ -28,14 +28,13 @@ def connectionLoop(sock):
       data, addr = sock.recvfrom(1024)
       #data = str(data)
 
-      msgDict = json.loads(data) # Convert [string json] to [python dictionary] TODO not working?
+      msgDict = json.loads(data) # Convert [string json] to [python dictionary] 
       msgDict['ip'] = str(addr[0]) # Append 'ip' and 'source', the address of message sender, to python dictionary
       msgDict['port'] = str(addr[1])
       msgString = json.dumps(msgDict) # Convert new dictionary back into string
       #msgQueue.append(msgString) # Append new string to message queue to be processed later
       msgQueue.put(msgString)
 
-#UNTESTED
 def processMessages(sock):
 
    while True:
@@ -48,13 +47,14 @@ def processMessages(sock):
             clients[srcAddress] = {}
             clients[srcAddress]['lastPing'] = datetime.now()
             clients[srcAddress]['position'] = {"x": 0,"y": 0,"z": 0}
+            clients[srcAddress]['orientation'] = {"x": 0,"y": 0,"z": 0}
             clients[srcAddress]['ip'] = str(msgDict['ip'])
             clients[srcAddress]['port'] = str(msgDict['port'])
             print('[Notice] New Client Added: ', str(srcAddress))
 
             # Inform all currently connected clients of the arrival of the new client. 
             print('[Notice] Sending connected clients the data of the new client...')
-            newMsgDict = {"cmd": 0,"player":{"ip":str(msgDict['ip']), "port":str(msgDict['port']), "position":{"x": 0,"y": 0,"z": 0}}}
+            newMsgDict = {"cmd": 0,"player":{"ip":str(msgDict['ip']), "port":str(msgDict['port']), "position":{"x": 0,"y": 0,"z": 0}, "orientation":{"x": 0,"y": 0,"z": 0}}}
             msgJson = json.dumps(newMsgDict)
             for targetClient in clients:
                sock.sendto(bytes(msgJson,'utf8'), (clients[targetClient]['ip'], int(clients[targetClient]['port']))) 
@@ -69,6 +69,7 @@ def processMessages(sock):
                newPlayerDict['ip'] = clients[clientKey]['ip']
                newPlayerDict['port'] = clients[clientKey]['port']
                newPlayerDict['position'] = clients[clientKey]['position']
+               newPlayerDict['orientation'] = clients[clientKey]['orientation']
                GameState['players'].append(newPlayerDict)
             
             msgState = json.dumps(GameState)
@@ -86,14 +87,18 @@ def processMessages(sock):
             else:
                print('[Error] Client ping has invalid client address key! Aborting proceedure...')
          
-         elif msgDict['flag'] == 4: # Client Coordinates
+         elif msgDict['flag'] == 4: # Client Coordinates and Orientation data
             keyString = msgDict['ip'] + ":"  + msgDict['port']
-            print('[Routine] Received client coordinates from: ', keyString)
+            print('[Routine] Received client data from: ', keyString)
 
             if keyString in clients:
-               clients[keyString]['position']['x'] = msgDict['x']
-               clients[keyString]['position']['y'] = msgDict['y']
-               clients[keyString]['position']['z'] = msgDict['z']
+               clients[keyString]['position']['x'] = msgDict['position']['x']
+               clients[keyString]['position']['y'] = msgDict['position']['y']
+               clients[keyString]['position']['z'] = msgDict['position']['z']
+
+               clients[keyString]['orientation']['x'] = msgDict['orientation']['x']
+               clients[keyString]['orientation']['y'] = msgDict['orientation']['y']
+               clients[keyString]['orientation']['z'] = msgDict['orientation']['z']
             else:
                print('[Error] Client coordinate update has invalid client address key! Aborting proceedure...')
 
@@ -142,6 +147,7 @@ def gameLoop(sock):
                player['ip'] = clients[clientKey]['ip']
                player['port'] = clients[clientKey]['port']
                player['position'] = {"x": clients[clientKey]['position']['x'], "y": clients[clientKey]['position']['y'], "z": clients[clientKey]['position']['z']}
+               player['orientation'] = {"x": clients[clientKey]['orientation']['x'], "y": clients[clientKey]['orientation']['y'], "z": clients[clientKey]['orientation']['z']}
                GameState['players'].append(player)
             else:
                break
